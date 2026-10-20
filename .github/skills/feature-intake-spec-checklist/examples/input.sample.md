@@ -1,25 +1,25 @@
-## Business context (brief)
-Reduce complaints caused by duplicate transfers.
+## Contexto del negocio (breve)
+Reducir las quejas causadas por transferencias duplicadas.
 
-## Feature request / user story
-As a user, I want to confirm a transfer before sending it
-so that I can avoid duplicates.
+## Solicitud de funcionalidad / historia de usuario
+Como usuario, quiero confirmar una transferencia antes de enviarla
+para evitar duplicados.
 
-## Expected impact
-Reduce duplicate-transfer complaints by 20% in one month.
+## Impacto esperado
+Reducir las quejas por transferencias duplicadas en un 20% en un mes.
 
-## Scope (in/out)
-In: pre-send confirmation, summary message, data validation.
-Out: infrastructure changes and a complete UI redesign.
+## Alcance (incluido/excluido)
+Incluido: confirmación antes del envío, mensaje de resumen y validación de datos.
+Excluido: cambios de infraestructura y un rediseño completo de la interfaz.
 
-## Known technical constraints
-Existing REST API, web frontend, standardized logging.
+## Restricciones técnicas conocidas
+API REST existente, frontend web y registro estandarizado.
 
-## Known risks
-Sensitive data exposure in logs; amount-validation errors.
+## Riesgos conocidos
+Exposición de datos sensibles en los registros; errores en la validación del monto.
 
-## Dependencies
-Accounts service and transfers service.
+## Dependencias
+Servicio de cuentas y servicio de transferencias.
 
-## Team Definition of Done (DoD)
-Unit tests, brief documentation, and reviewed PR.
+## Definición de terminado del equipo (DoD)
+Pruebas unitarias, documentación breve y solicitud de cambios revisada.
