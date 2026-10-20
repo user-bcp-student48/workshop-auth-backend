@@ -47,6 +47,10 @@ class JwtTokenServiceTest {
         assertEquals("student", claims.get("sub"));
         assertEquals("STUDENT", claims.get("role"));
         assertEquals("workshop-auth", claims.get("iss"));
+        Object audience = claims.get("aud");
+        assertTrue(audience instanceof String
+            ? "requirements-api".equals(audience)
+            : ((java.util.List<?>) audience).contains("requirements-api"));
         assertTrue(expiresAt >= earliestExpiry);
         assertTrue(expiresAt <= Instant.now().getEpochSecond() + JwtTokenService.TOKEN_TTL_SECONDS);
     }

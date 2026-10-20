@@ -13,9 +13,13 @@ public class JwtTokenService {
     @ConfigProperty(name = "auth.jwt.issuer")
     String issuer;
 
+    @ConfigProperty(name = "auth.jwt.audience")
+    String audience;
+
     public String create(String username, String role) {
         long expiresAt = Instant.now().plusSeconds(TOKEN_TTL_SECONDS).getEpochSecond();
         return Jwt.issuer(issuer)
+            .audience(audience)
                 .subject(username)
                 .claim("role", role)
                 .expiresAt(expiresAt)
