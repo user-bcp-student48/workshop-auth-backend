@@ -8,11 +8,15 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.List;
+import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusTest
@@ -45,7 +49,11 @@ class AuthResourceTest {
                 .statusCode(200)
                 .body("user.username", is("trainer"))
                 .body("user.displayName", is("Workshop Trainer"))
-                .body("user.role", is("TRAINER"));
+                .body("user.role", is("TRAINER"))
+                .body("token", notNullValue())
+                .body("token.length()", greaterThan(0))
+                .body("expiresIn", is(3600))
+                .body("debug", is("authenticated-with-legacy-flow"));
     }
 
     @Test
@@ -56,7 +64,48 @@ class AuthResourceTest {
                 .when().post("/auth/login")
                 .then()
                 .statusCode(401)
-                .body("message", is("Invalid user unknown or password"));
+                .body("message", is("Invalid user unknown or password"))
+                .body("$", not(hasKey("token")));
+    }
+
+    @Test
+    void rejectsWrongPasswordForExistingUser() {
+        given()
+                .contentType("application/json")
+                .body(Map.of("username", "student", "password", "wrong"))
+                .when().post("/auth/login")
+                .then()
+                .statusCode(401)
+                .body("message", is("Invalid user student or password"))
+                .body("$", not(hasKey("token")));
+    }
+
+    @Test
+    void treatsSqlSyntaxInUsernameAsLiteral() {
+        for (String username : List.of("' OR '1'='1' --", "student' --", "' OR 1=1 --")) {
+            given()
+                    .contentType("application/json")
+                    .body(Map.of("username", username, "password", "wrong"))
+                    .when().post("/auth/login")
+                    .then()
+                    .statusCode(401)
+                    .body("message", is("Invalid user " + username + " or password"))
+                    .body("$", not(hasKey("token")));
+        }
+    }
+
+    @Test
+    void treatsSqlSyntaxInPasswordAsLiteral() {
+        for (String password : List.of("' OR '1'='1' --", "wrong' OR 1=1 --", "' OR 1=1 --")) {
+            given()
+                    .contentType("application/json")
+                    .body(Map.of("username", "student", "password", password))
+                    .when().post("/auth/login")
+                    .then()
+                    .statusCode(401)
+                    .body("message", is("Invalid user student or password"))
+                    .body("$", not(hasKey("token")));
+        }
     }
 
     @Test
@@ -67,7 +116,8 @@ class AuthResourceTest {
                 .when().post("/auth/login")
                 .then()
                 .statusCode(401)
-                .body("message", is("Invalid user O'Brien or password"));
+                .body("message", is("Invalid user O'Brien or password"))
+                .body("$", not(hasKey("token")));
     }
 
     @Test
@@ -78,7 +128,13 @@ class AuthResourceTest {
                 .when().post("/auth/login")
                 .then()
                 .statusCode(200)
-                .body("user.username", is("student"));
+                .body("user.username", is("student"))
+                .body("user.displayName", is("Workshop Student"))
+                .body("user.role", is("STUDENT"))
+                .body("token", notNullValue())
+                .body("token.length()", greaterThan(0))
+                .body("expiresIn", is(3600))
+                .body("debug", is("authenticated-with-legacy-flow"));
     }
 
     @Test

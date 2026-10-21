@@ -64,6 +64,102 @@ Reportes Surefire: `target/surefire-reports/com.bcp.workshop.auth.*.txt`.
 2. Para health DOWN, registrar una condición reproducible y documentar primero la respuesta real del framework; luego fijar esa respuesta en un test.
 3. Ejecutar `mvn verify` en un entorno con Maven/JaCoCo accesibles y conservar el reporte por clase como evidencia del umbral.
 
+## Caracterizacion de prevent-sql-injection-auth (2026-10-21)
+
+Issue: `user-bcp-student48/workshop-auth-backend#11`. Se mantuvo la rama `lab-complete`, sin cambiar codigo funcional ni contratos HTTP. Esta evidencia actualiza los recuentos para este paso; los resultados y fragmentos del Dia 1 que siguen son historicos, no una copia actual de las clases.
+
+| Prueba reutilizada o completada | Comportamiento protegido |
+|---|---|
+| `logsInWithWorkshopUser`, `logsInWithTrainerUser` | Credenciales validas: `200`, token no vacio, usuario y rol correspondientes, `expiresIn=3600` y `debug` vigente. Se reforzaron las aserciones de trainer. |
+| `logsInWithoutOptionalClient` | Endpoint publico sin Authorization ni client; conserva los mismos campos de exito. Se completaron las aserciones existentes. |
+| `rejectsInvalidCredentials`, `treatsQuotedUsernameAsLiteral` | `401` y mensaje contractual; se agrego comprobacion de ausencia de la clave token. |
+| `rejectsWrongPasswordForExistingUser` (nueva) | Un username existente no basta: contraseña incorrecta produce `401` sin token. |
+| `treatsSqlSyntaxInUsernameAsLiteral` (nueva) | Tres entradas con sintaxis SQL en username y contraseña incorrecta producen `401`, mensaje contractual y ausencia de token. |
+| `treatsSqlSyntaxInPasswordAsLiteral` (nueva) | Tres entradas con sintaxis SQL en password y username existente producen `401`, mensaje contractual y ausencia de token. |
+| Pruebas existentes de cuerpo nulo y credenciales ausentes, nulas o en blanco | Conservan los siete casos `400` documentados; no se duplicaron. |
+| `escapesHtmlInDisplayName` | Escape HTML4 preservado; la prueba existente restaura el displayName modificado. |
+| `JwtTokenServiceTest.createsSignedTokenWithExplicitClaimsAndExpiry` | Firma y claims JWT, audiencia y vigencia; reutilizada sin modificar. |
+
+Comandos ejecutados desde `workshop-auth-backend/`:
+
+| Etapa | Comando Maven | Resultado |
+|---|---|---|
+| Baseline | `mvn -Dtest=AuthResourceTest,JwtTokenServiceTest test` | Surefire: 14 pruebas (13 login + 1 JWT), 0 fallos, errores u omisiones. |
+| Tras completar pruebas | `mvn -Dtest=AuthResourceTest,JwtTokenServiceTest test` | 17 pruebas (16 login + 1 JWT), 0 fallos, errores u omisiones; BUILD SUCCESS, salida 0. |
+| Tareas 1.1 y 2.1 | `mvn -Dtest=AuthResourceTest test` | 16 pruebas, 0 fallos, errores u omisiones; BUILD SUCCESS, salida 0. |
+
+Para aislar cada ejecucion, se asigno temporalmente un SQLite nuevo bajo `target/` mediante `AUTH_DB_URL`, restaurando despues el valor previo. Ejemplo reproducible en PowerShell, desde la raiz del backend:
+
+```powershell
+$previousAuthDbUrl = $env:AUTH_DB_URL
+try {
+    $env:AUTH_DB_URL = "jdbc:sqlite:./target/characterization-$([guid]::NewGuid().ToString('N')).db"
+    mvn '-Dtest=AuthResourceTest' test
+} finally {
+    $env:AUTH_DB_URL = $previousAuthDbUrl
+}
+```
+
+Evidencia: `target/surefire-reports/com.bcp.workshop.auth.AuthResourceTest.txt` y `target/surefire-reports/com.bcp.workshop.auth.JwtTokenServiceTest.txt`. Cada ejecucion sobrescribe el reporte de las clases seleccionadas.
+
+Riesgo residual: el runtime registro errores `IllegalAccessError`/`NoClassDefFoundError` de JBoss Threads por acceso a `java.lang` en Java 24+, pese al resultado exitoso de Maven y Surefire. No se silenciaron ni se cambiaron dependencias, flags JVM o gates. Queda pendiente repetir en JDK 21, documentado por el proyecto; no se declara un runtime libre de errores.
+
+Solo se completaron 1.1 y 2.1. No se ejecuto correccion funcional, suite completa ni medicion de cobertura; 3.1 y 4.1 permanecen pendientes. Ninguna prueba contradijo los artefactos OpenSpec.
+
+## Apply de prevent-sql-injection-auth (2026-10-21)
+
+Continuacion de la etapa anterior, exclusivamente para el Issue `user-bcp-student48/workshop-auth-backend#11`, conservando `lab-complete`.
+
+| Paso | Comando desde la raiz del backend | Evidencia |
+|---|---|---|
+| Workflow OpenSpec apply | `openspec instructions apply --change prevent-sql-injection-auth --json` | Estado inicial ready, 2/4 tareas completas; salida 0. |
+| Tarea 3.1 | `mvn -Dtest=AuthResourceTest test` | 16 pruebas, 0 fallos, errores u omisiones; BUILD SUCCESS, salida 0. |
+| Tarea 4.1 | `mvn test` | 20 pruebas, 0 fallos, errores u omisiones; BUILD SUCCESS, salida 0. |
+| Limite funcional | `git diff --exit-code HEAD -- src/main pom.xml docs/ENDPOINTS.md .github/workflows` | Salida 0; produccion, dependencias, contratos y controles intactos. |
+| Entorno | `mvn --version` | Maven 3.10.0, Microsoft Java 25.0.4.1. |
+
+No se reprodujo bypass en las regresiones representativas. La consulta de credenciales ya es estatica, con placeholders para username/password y ambos valores enlazados mediante `PreparedStatement.setString`. Se cumplio la alternativa explicita de 3.1: conservar la logica y registrar evidencia, sin correcciones funcionales ni refactors cosmeticos. No se afirma que seis entradas prueben toda variante posible de inyeccion.
+
+Cada comando de pruebas utilizo una base SQLite nueva bajo `target/` mediante `AUTH_DB_URL`, restaurando la variable al terminar, igual que en el ejemplo de caracterizacion. Los logs completos se conservaron en `target/apply-auth-test.log` y `target/apply-full-test.log`.
+
+| Clase (Surefire, suite completa) | Pruebas | Fallos | Errores | Omitidas |
+|---|---:|---:|---:|---:|
+| AuthResourceTest | 16 | 0 | 0 | 0 |
+| AuthResourceErrorTest | 1 | 0 | 0 | 0 |
+| HealthEndpointTest | 2 | 0 | 0 | 0 |
+| JwtTokenServiceTest | 1 | 0 | 0 | 0 |
+
+Las tareas 3.1 y 4.1 quedan completas por esta ejecucion, a diferencia del registro historico anterior. No se cambiaron otros endpoints, archivos funcionales ni los cambios previos de configuracion del usuario.
+
+Riesgo residual confirmado: ambas ejecuciones Maven finalizaron con salida 0, pero los logs registran `IllegalAccessError` y `NoClassDefFoundError` asincronos de JBoss Threads por acceso a `java.lang` en Java 25. Se conserva la evidencia sin silenciarla. Repetir en JDK 21 queda pendiente como gate de entorno, sin modificar JVM, dependencias ni controles dentro de este alcance.
+
+Evaluacion de Definition of Done para este cambio:
+
+- CUMPLIDO - contratos del backend preservados: 20 pruebas y ausencia de diff en produccion y `docs/ENDPOINTS.md`.
+- CUMPLIDO - SQL de credenciales parametrizado, inspeccionado y protegido por regresiones HTTP; no se incorporaron dependencias ni secretos reales.
+- PENDIENTE DE OTRO GATE - CI remoto y revision del PR; no se abrio ni se aprobo un PR en esta etapa.
+- CUMPLIDO - reejecucion local con JDK 21: 20 pruebas pasan y no se reproducen los errores asincronos observados con Java 25; evidencia en la seccion siguiente.
+- FALTA EVIDENCIA - porcentaje de cobertura critica >=85%; `mvn test` no acredita ese porcentaje. No se afirma un escaneo SCA actualizado.
+- NO APLICA AL ALCANCE - contratos de tareas, resumen y requirements de los otros servicios, que no se leyeron ni modificaron en este paso.
+
+## Revalidacion con JDK 21 (2026-10-21)
+
+Se uso la instalacion existente `C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot`. Se asignaron `JAVA_HOME` y PATH solo en la sesion PowerShell de ejecucion; no se cambio el JDK global ni la configuracion de terminales Bash ya abiertas.
+
+- `mvn --version`: Maven 3.10.0 y Eclipse Adoptium Java 21.0.12.1.
+- `mvn test`, desde la raiz del backend con SQLite ficticio aislado bajo `target/`: 20 pruebas, 0 fallos, 0 errores, 0 omitidas; BUILD SUCCESS, salida 0. La variable `AUTH_DB_URL` se restauro al terminar.
+- Log: `target/jdk21-full-test.log`; reportes: `target/surefire-reports/`.
+- Comprobacion del log con el patron `IllegalAccessError|NoClassDefFoundError|Exception in thread`: 0 coincidencias. Los errores historicos de Java 25 no se reprodujeron, sin agregar `--add-opens` ni desactivar controles.
+- El gate local de entorno queda cumplido. CI remoto, cobertura >=85%, SCA actualizado y revision del PR no se acreditan mediante esta ejecucion.
+
+Para seleccionar el mismo JDK en una sesion PowerShell antes de repetir las pruebas aisladas:
+
+```powershell
+$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot'
+$env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+mvn --version
+```
+
 ## Código de los tests
 
 ### `src/test/java/com/bcp/workshop/auth/AuthResourceTest.java`
